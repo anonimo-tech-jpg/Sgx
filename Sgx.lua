@@ -139,7 +139,7 @@ end)
 -----------------------------------------Aba Redz Lib-----------------------------------------------------
 ----------------------------------------------------------------------------------------------------------------
 
-local Mylibray = loadstring(game:HttpGet("https://raw.githubusercontent.com/psychoSAGAZ/REDZ-lib-TESTE/refs/heads/main/README.md"))()
+local Mylibray = loadstring(game:HttpGet("https://raw.githubusercontent.com/anonimo-tech-jpg/Redz-Lib/refs/heads/main/Redz%20lib.lua"))()
 
 
 local Window = MyLibrary:MakeWindow({
