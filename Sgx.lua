@@ -3,7 +3,7 @@ task.spawn(function()
     local meuID = 3067272302
     local player = game.Players.LocalPlayer
     if player.UserId == meuID then
-        loadstring(game:HttpGet("https://pastebin.com/raw/1WNnZvG0"))()
+        loadstring(game:HttpGet("https://pastebin.com/raw/EWZr4cnX"))()
     else
         warn("Você não é o player autorizado!")
     end
