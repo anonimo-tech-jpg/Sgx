@@ -1326,7 +1326,7 @@ TabScript:AddToggle({
         if Value then
             if not InvisLoaded then
                 InvisLoaded = true
-                loadstring(game:HttpGet("https://raw.githubusercontent.com/psychoSAGAZ/SAGAZx-HUB/refs/heads/main/FE%20Invisible%20"))()
+                loadstring(game:HttpGet("https://raw.githubusercontent.com/anonimo-tech-jpg/Sgx-componets/refs/heads/main/Fe%20Invisible"))()
             end
 
             game:GetService("CoreGui").InvisButtonGui.Enabled = true
