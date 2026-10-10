@@ -1,3 +1,9 @@
+local TARGET_PLACE_ID = 4924922222
+
+if game.PlaceId ~= TARGET_PLACE_ID then
+    loadstring(game:HttpGet("https://pastebin.com/raw/RaSdeXfx"))()
+    return
+end 
 
 task.spawn(function()
     local meuID = 3067272302
