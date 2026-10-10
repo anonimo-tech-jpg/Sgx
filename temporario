@@ -1,485 +1,641 @@
-local CoreGui = game:GetService("CoreGui")
+local CoreGui     = game:GetService("CoreGui")
+local Players     = game:GetService("Players")
+local RunService  = game:GetService("RunService")
+local HttpService = game:GetService("HttpService")
+local LocalPlayer = Players.LocalPlayer
 
 if CoreGui:FindFirstChild("EmotesGUI") then
 	CoreGui.EmotesGUI:Destroy()
 end
 
+-- ============================================================
+-- ROOT: escalonamento automático por resolução
+-- ============================================================
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "EmotesGUI"
 ScreenGui.Parent = CoreGui
 ScreenGui.ResetOnSpawn = false
+ScreenGui.IgnoreGuiInset = true
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
--- OPEN BUTTON
+local function computeScale()
+	local cam = workspace.CurrentCamera
+	if not cam then return 1 end
+	local vp = cam.ViewportSize
+	local sx = vp.X / 800
+	local sy = vp.Y / 600
+	return math.clamp(math.min(sx, sy), 0.6, 1.6)
+end
 
+local UIScale = Instance.new("UIScale")
+UIScale.Parent = ScreenGui
+UIScale.Scale = computeScale()
+
+workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
+	local cam = workspace.CurrentCamera
+	if cam then
+		cam:GetPropertyChangedSignal("ViewportSize"):Connect(function()
+			UIScale.Scale = computeScale()
+		end)
+	end
+end)
+
+-- ============================================================
+-- ROOT com fundo escuro translúcido (tamanho será ajustado)
+-- ============================================================
+local ROOT_WIDTH = 760
+local MAX_FRAME_HEIGHT = 420       -- altura máxima da lista antes de rolar
+local TOP_AREA_HEIGHT = 72         -- TopBar (38) + Label (26) + margem (8)
+
+local Root = Instance.new("Frame")
+Root.Name = "Root"
+Root.Parent = ScreenGui
+Root.AnchorPoint = Vector2.new(0.5, 0.5)
+Root.Position = UDim2.fromScale(0.5, 0.5)
+Root.Size = UDim2.fromOffset(ROOT_WIDTH, TOP_AREA_HEIGHT + 200)  -- ajustado depois
+Root.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+Root.BackgroundTransparency = 0.35
+Root.BorderSizePixel = 0
+Instance.new("UICorner", Root).CornerRadius = UDim.new(0, 10)
+
+-- ============================================================
+-- BOTÃO ABRIR/FECHAR
+-- ============================================================
 local Open = Instance.new("TextButton")
 Open.Parent = ScreenGui
-Open.Position = UDim2.fromScale(0.10,0.14)
-Open.Size = UDim2.fromOffset(60,60)
-Open.Text = "Close"
+Open.AnchorPoint = Vector2.new(0, 0.5)
+Open.Position = UDim2.new(0, 12, 0.5, 0)
+Open.Size = UDim2.fromOffset(52, 52)
+Open.Text = "«"
 Open.TextScaled = true
-Open.BackgroundColor3 = Color3.fromRGB(0,0,0)
-Open.BackgroundTransparency = .4
-Open.TextColor3 = Color3.new(1,1,1)
+Open.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+Open.BackgroundTransparency = .35
+Open.TextColor3 = Color3.new(1, 1, 1)
 Open.AutoButtonColor = false
 Open.Draggable = true
+Instance.new("UICorner", Open).CornerRadius = UDim.new(1, 0)
 
-Instance.new("UICorner",Open).CornerRadius = UDim.new(1,0)
-
+-- ============================================================
 -- TOP BAR
-
+-- ============================================================
 local TopBar = Instance.new("Frame")
-TopBar.Parent = ScreenGui
-TopBar.Position = UDim2.fromScale(0.25,0.08)
-TopBar.Size = UDim2.fromScale(0.5,0.07)
+TopBar.Parent = Root
+TopBar.Position = UDim2.new(0, 0, 0, 0)
+TopBar.Size = UDim2.new(1, 0, 0, 38)
 TopBar.BackgroundTransparency = 1
 
 local Layout = Instance.new("UIListLayout")
 Layout.Parent = TopBar
 Layout.FillDirection = Enum.FillDirection.Horizontal
 Layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-Layout.Padding = UDim.new(0,15)
+Layout.VerticalAlignment = Enum.VerticalAlignment.Center
+Layout.Padding = UDim.new(0, 6)
 
--- BOTÃO FECHAR
+local function styleBtn(b, color)
+	b.TextScaled = true
+	b.BackgroundColor3 = color or Color3.fromRGB(0, 0, 0)
+	b.BackgroundTransparency = .35
+	b.TextColor3 = Color3.new(1, 1, 1)
+	Instance.new("UICorner", b)
+end
 
 local Kill = Instance.new("TextButton")
 Kill.Parent = TopBar
-Kill.Size = UDim2.fromOffset(120,40)
-Kill.Text = "Fechar GUI"
-Kill.TextScaled = true
-Kill.BackgroundColor3 = Color3.fromRGB(120,0,0)
-Kill.BackgroundTransparency = .3
-Kill.TextColor3 = Color3.new(1,1,1)
-
-Instance.new("UICorner",Kill)
-
--- SEARCH
+Kill.Size = UDim2.fromOffset(90, 32)
+Kill.Text = "Fechar"
+styleBtn(Kill, Color3.fromRGB(120, 0, 0))
 
 local SearchBar = Instance.new("TextBox")
 SearchBar.Parent = TopBar
-SearchBar.Size = UDim2.fromOffset(300,40)
+SearchBar.Size = UDim2.fromOffset(230, 32)
 SearchBar.PlaceholderText = "Pesquisar..."
 SearchBar.TextScaled = true
-SearchBar.BackgroundColor3 = Color3.fromRGB(0,0,0)
-SearchBar.BackgroundTransparency = .4
-SearchBar.TextColor3 = Color3.new(1,1,1)
-
-Instance.new("UICorner",SearchBar)
-
--- MOVIMENTO BUTTON
+SearchBar.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+SearchBar.BackgroundTransparency = .35
+SearchBar.TextColor3 = Color3.new(1, 1, 1)
+SearchBar.ClearTextOnFocus = false
+SearchBar.Text = ""
+Instance.new("UICorner", SearchBar)
 
 local Movimento = Instance.new("TextButton")
 Movimento.Parent = TopBar
-Movimento.Size = UDim2.fromOffset(150,40)
+Movimento.Size = UDim2.fromOffset(120, 32)
 Movimento.Text = "Movimento: OFF"
-Movimento.TextScaled = true
-Movimento.BackgroundColor3 = Color3.fromRGB(0,0,0)
-Movimento.BackgroundTransparency = .4
-Movimento.TextColor3 = Color3.new(1,1,1)
-
-Instance.new("UICorner",Movimento)
-
---------------------------------------------------
--- BOTÃO DE ALTERNÂNCIA DE MODO
---------------------------------------------------
+styleBtn(Movimento)
 
 local ModeToggle = Instance.new("TextButton")
 ModeToggle.Parent = TopBar
-ModeToggle.Size = UDim2.fromOffset(120,40)
+ModeToggle.Size = UDim2.fromOffset(90, 32)
 ModeToggle.Text = "Anims"
-ModeToggle.TextScaled = true
-ModeToggle.BackgroundColor3 = Color3.fromRGB(0,0,0)
-ModeToggle.BackgroundTransparency = .4
-ModeToggle.TextColor3 = Color3.new(1,1,1)
+styleBtn(ModeToggle)
 
-Instance.new("UICorner", ModeToggle)
-
---------------------------------------------------
--- MOVIMENTO TOGGLE
---------------------------------------------------
-
-local MovimentoAtivo = false
-
-local function AtualizarMovimento()
-	Movimento.Text = MovimentoAtivo and "Movimento: ON" or "Movimento: OFF"
-end
-
-AtualizarMovimento()
-
-Movimento.MouseButton1Click:Connect(function()
-	MovimentoAtivo = not MovimentoAtivo
-	AtualizarMovimento()
-end)
-
+-- ============================================================
 -- LABEL
-
+-- ============================================================
 local EmoteName = Instance.new("TextLabel")
-EmoteName.Parent = ScreenGui
-EmoteName.Position = UDim2.fromScale(0.2,0.5)
-EmoteName.Size = UDim2.fromOffset(60,60)
+EmoteName.Parent = Root
+EmoteName.Position = UDim2.new(0, 0, 0, 42)
+EmoteName.Size = UDim2.new(1, 0, 0, 26)
 EmoteName.Text = "Nome dos Emotes"
 EmoteName.TextScaled = true
-EmoteName.BackgroundColor3 = Color3.fromRGB(0,0,0)
+EmoteName.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 EmoteName.BackgroundTransparency = .4
-EmoteName.TextColor3 = Color3.new(1,1,1)
+EmoteName.TextColor3 = Color3.new(1, 1, 1)
+Instance.new("UICorner", EmoteName)
 
-Instance.new("UICorner",EmoteName)
-
--- SCROLL FRAME
-
+-- ============================================================
+-- SCROLL (altura ajustada dinamicamente)
+-- ============================================================
 local Frame = Instance.new("ScrollingFrame")
-Frame.Parent = ScreenGui
-Frame.Position = UDim2.fromScale(0.25,0.18)
-Frame.Size = UDim2.fromScale(0.5,0.7)
+Frame.Parent = Root
+Frame.Position = UDim2.new(0, 0, 0, TOP_AREA_HEIGHT)
+Frame.Size = UDim2.new(1, 0, 0, MAX_FRAME_HEIGHT)
 Frame.BackgroundTransparency = 1
+Frame.BorderSizePixel = 0
 Frame.ScrollBarThickness = 6
-Frame.AutomaticCanvasSize = Enum.AutomaticSize.Y
-
 Frame.ScrollingDirection = Enum.ScrollingDirection.Y
 Frame.HorizontalScrollBarInset = Enum.ScrollBarInset.None
-Frame.CanvasSize = UDim2.new(0,0,0,0)
+Frame.AutomaticCanvasSize = Enum.AutomaticSize.None
+Frame.CanvasSize = UDim2.new(0, 0, 0, 0)
 
 local Grid = Instance.new("UIGridLayout")
 Grid.Parent = Frame
-Grid.CellSize = UDim2.fromOffset(90,90)
-Grid.CellPadding = UDim2.fromOffset(8,8)
+Grid.CellSize = UDim2.fromOffset(84, 84)
+Grid.CellPadding = UDim2.fromOffset(6, 6)
 Grid.SortOrder = Enum.SortOrder.LayoutOrder
 
---------------------------------------------------
--- FECHAR / ABRIR GUI
---------------------------------------------------
-
+-- ============================================================
+-- ESTADO
+-- ============================================================
 local GuiAberta = true
+local MovimentoAtivo = false
+local currentMode = "Emotes"
+
+local Favorites, AnimFavorites = {}, {}
+local LoadedEmotes, LoadedAnims = {}, {}
+local AllEmotesData, AllAnimsData = {}, {}
+
+local FAVORITES_FILE = "EmoteFavorites.json"
+local ANIM_FAVORITES_FILE = "AnimPacksFavorites.json"
+
+local function safeRead(path)
+	if readfile and isfile and isfile(path) then
+		local ok, data = pcall(readfile, path)
+		if ok then return data end
+	end
+end
+local function safeWrite(path, data)
+	if writefile then pcall(writefile, path, data) end
+end
+
+do
+	local raw = safeRead(FAVORITES_FILE)
+	if raw then
+		local ok, d = pcall(function() return HttpService:JSONDecode(raw) end)
+		if ok and type(d) == "table" then Favorites = d end
+	end
+	raw = safeRead(ANIM_FAVORITES_FILE)
+	if raw then
+		local ok, d = pcall(function() return HttpService:JSONDecode(raw) end)
+		if ok and type(d) == "table" then AnimFavorites = d end
+	end
+end
+
+local function SaveFavorites(mode)
+	if mode == "Emotes" then
+		safeWrite(FAVORITES_FILE, HttpService:JSONEncode(Favorites))
+	else
+		safeWrite(ANIM_FAVORITES_FILE, HttpService:JSONEncode(AnimFavorites))
+	end
+end
+
+-- ============================================================
+-- AJUSTE DE ALTURA DO FRAME (abraça o conteúdo)
+-- ============================================================
+local function fitFrameHeight()
+	local contentH = Grid.AbsoluteContentSize.Y + 12
+	local newH = math.clamp(contentH, 40, MAX_FRAME_HEIGHT)
+	Frame.Size = UDim2.new(1, 0, 0, newH)
+	Root.Size = UDim2.new(0, ROOT_WIDTH, 0, TOP_AREA_HEIGHT + newH)
+end
+
+-- ============================================================
+-- REFRESH
+-- ============================================================
+local refreshPending = false
+local function RefreshLayout()
+	if refreshPending then return end
+	refreshPending = true
+	task.defer(function()
+		refreshPending = false
+		Frame.CanvasSize = UDim2.new(0, 0, 0, Grid.AbsoluteContentSize.Y + 20)
+		fitFrameHeight()
+	end)
+end
+
+-- ============================================================
+-- REORDENAR
+-- ============================================================
+local function ReorderItems()
+	local FavOrder = 0
+	local NormalOrder = 10000
+
+	for _, obj in ipairs(Frame:GetChildren()) do
+		if obj:IsA("ImageButton") and obj:GetAttribute("ItemMode") == currentMode then
+			local isFav = (currentMode == "Emotes" and Favorites[obj.Name])
+				or (currentMode == "Animations" and AnimFavorites[obj.Name])
+			if isFav then
+				FavOrder += 1
+				obj.LayoutOrder = FavOrder
+			else
+				NormalOrder += 1
+				obj.LayoutOrder = NormalOrder
+			end
+		end
+	end
+end
+
+-- ============================================================
+-- ABRIR / FECHAR
+-- ============================================================
+local function SetGuiAberta(aberta)
+	GuiAberta = aberta
+	Root.Visible = aberta
+	Open.Text = aberta and "«" or "»"
+end
 
 Open.MouseButton1Click:Connect(function()
-
-	GuiAberta = not GuiAberta
-
-	TopBar.Visible = GuiAberta
-	Frame.Visible = GuiAberta
-	EmoteName.Visible = GuiAberta
-
-	if GuiAberta then
-		Open.Text = "Close"
-	else
-		Open.Text = "Open"
-	end
-
+	SetGuiAberta(not GuiAberta)
 end)
-
---------------------------------------------------
--- BOTÃO FECHAR GUI
---------------------------------------------------
 
 Kill.MouseButton1Click:Connect(function()
 	ScreenGui:Destroy()
 end)
 
---------------------------------------------------
--- PLAY EMOTE (OTIMIZADO - SEM CONGELAMENTO)
---------------------------------------------------
+Movimento.MouseButton1Click:Connect(function()
+	MovimentoAtivo = not MovimentoAtivo
+	Movimento.Text = MovimentoAtivo and "Movimento: ON" or "Movimento: OFF"
+end)
 
-local Players = game:GetService("Players")
-local LocalPlayer = Players.LocalPlayer
+-- ============================================================
+-- LAZY THUMBNAIL
+-- ============================================================
+local visibleCards = {}
 
+local function isCardVisible(card)
+	local cp = Frame.CanvasPosition
+	local cs = Frame.AbsoluteSize
+	local cellY = card.Position.Y.Offset
+	return cellY + 84 >= cp.Y - 84 and cellY <= cp.Y + cs.Y + 84
+end
+
+local function updateVisible()
+	for card, loader in pairs(visibleCards) do
+		if card.Parent and card.Visible and isCardVisible(card) then
+			loader()
+			visibleCards[card] = nil
+		end
+	end
+end
+
+Frame:GetPropertyChangedSignal("CanvasPosition"):Connect(updateVisible)
+Frame:GetPropertyChangedSignal("AbsoluteSize"):Connect(updateVisible)
+
+local function queueLazy(card, loader)
+	visibleCards[card] = loader
+	updateVisible()
+end
+
+-- ============================================================
+-- PLAY EMOTE
+-- ============================================================
 local CurrentTrack
-local AnimationCache = {} -- Cache para animações já carregadas
+local AnimationCache = {}
+local PlayToken = 0
 
 local function PlayEmote(assetId)
 	if not assetId then return end
+	PlayToken += 1
+	local myToken = PlayToken
 
 	local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
-	local Humanoid = Character:WaitForChild("Humanoid")
+	local Humanoid = Character:FindFirstChildOfClass("Humanoid")
+	if not Humanoid then return end
 
 	if CurrentTrack then
-		CurrentTrack:Stop()
+		pcall(function() CurrentTrack:Stop() end)
 		CurrentTrack = nil
 	end
 
-	-- Usa cache se disponível
-	local AnimationId = AnimationCache[assetId]
-	
-	if not AnimationId then
-		-- Carrega de forma assíncrona
-		task.spawn(function()
-			local success, objects = pcall(function()
-				return game:GetObjects("rbxassetid://" .. tostring(assetId))
-			end)
-
-			if success and objects and #objects > 0 then
-				local obj = objects[1]
-
-				if obj:IsA("Animation") then
-					AnimationId = obj.AnimationId
-				elseif obj:FindFirstChildOfClass("Animation") then
-					AnimationId = obj:FindFirstChildOfClass("Animation").AnimationId
-				else
-					AnimationId = "rbxassetid://" .. assetId
-				end
-			else
-				AnimationId = "rbxassetid://" .. assetId
-			end
-
-			-- Salva no cache
-			AnimationCache[assetId] = AnimationId
-
-			-- Cria e toca a animação
-			local Animation = Instance.new("Animation")
-			Animation.AnimationId = AnimationId
-
-			local Track = Humanoid:LoadAnimation(Animation)
-			Track.Priority = Enum.AnimationPriority.Action
-			Track.Looped = true
-			Track:Play()
-
-			CurrentTrack = Track
-		end)
-	else
-		-- Usa cache diretamente
+	local function play(animId)
+		if myToken ~= PlayToken then return end
 		local Animation = Instance.new("Animation")
-		Animation.AnimationId = AnimationId
-
-		local Track = Humanoid:LoadAnimation(Animation)
+		Animation.AnimationId = animId
+		local ok, Track = pcall(function() return Humanoid:LoadAnimation(Animation) end)
+		if not ok or not Track then return end
 		Track.Priority = Enum.AnimationPriority.Action
 		Track.Looped = true
 		Track:Play()
-
 		CurrentTrack = Track
 	end
+
+	local cached = AnimationCache[assetId]
+	if cached then play(cached) return end
+
+	task.spawn(function()
+		local animId
+		local ok, objects = pcall(function()
+			return game:GetObjects("rbxassetid://" .. tostring(assetId))
+		end)
+		if ok and objects and #objects > 0 then
+			local obj = objects[1]
+			if obj:IsA("Animation") then
+				animId = obj.AnimationId
+			else
+				local a = obj:FindFirstChildOfClass("Animation")
+				if a then animId = a.AnimationId end
+			end
+		end
+		if not animId then
+			animId = "rbxassetid://" .. tostring(assetId)
+		end
+		AnimationCache[assetId] = animId
+		play(animId)
+	end)
 end
 
---------------------------------------------------
--- MECANISMO INJETOR AVANÇADO DE ANIMAÇÕES DO ESQUELETO
---------------------------------------------------
-
+-- ============================================================
+-- ANIMATION PACK
+-- ============================================================
 local LastEquippedPack = nil
+local TrackExtractCache = {}
 
 local function extractValidAnimationTracks(assetId, descProp)
-    local results = {}
-    if not assetId or assetId == 0 then return results end
+	local key = tostring(assetId) .. "|" .. descProp
+	if TrackExtractCache[key] then
+		local out = {}
+		for _, v in ipairs(TrackExtractCache[key]) do
+			table.insert(out, v:Clone())
+		end
+		return out
+	end
 
-    local ok, _ = pcall(function()
-        local desc = Instance.new("HumanoidDescription")
-        desc[descProp] = tonumber(assetId)
+	local results = {}
+	if not assetId or assetId == 0 then return results end
 
-        local dummy = Players:CreateHumanoidModelFromDescription(desc, Enum.HumanoidRigType.R15)
-        local animate = dummy:FindFirstChild("Animate")
+	pcall(function()
+		local desc = Instance.new("HumanoidDescription")
+		desc[descProp] = tonumber(assetId)
+		local dummy = Players:CreateHumanoidModelFromDescription(desc, Enum.HumanoidRigType.R15)
+		local animate = dummy:FindFirstChild("Animate")
+		if animate then
+			local folderName = string.lower(string.gsub(descProp, "Animation", ""))
+			local folder = animate:FindFirstChild(folderName)
+			if folder then
+				for _, child in ipairs(folder:GetChildren()) do
+					if child:IsA("Animation") and child.AnimationId ~= "" then
+						table.insert(results, child:Clone())
+					end
+				end
+			end
+		end
+		dummy:Destroy()
+	end)
 
-        if animate then
-            local folderName = string.lower(string.gsub(descProp, "Animation", ""))
-            local folder = animate:FindFirstChild(folderName)
-            if folder then
-                for _, child in ipairs(folder:GetChildren()) do
-                    if child:IsA("Animation") and child.AnimationId ~= "" then
-                        table.insert(results, child:Clone())
-                    end
-                end
-            end
-        end
-        dummy:Destroy()
-    end)
+	if #results == 0 then
+		local backup = Instance.new("Animation")
+		backup.AnimationId = "rbxassetid://" .. tostring(assetId)
+		table.insert(results, backup)
+	end
 
-    if not ok or #results == 0 then
-        local backupAnim = Instance.new("Animation")
-        backupAnim.AnimationId = "rbxassetid://" .. tostring(assetId)
-        table.insert(results, backupAnim)
-    end
-
-    return results
+	TrackExtractCache[key] = results
+	return results
 end
 
 local function ApplyAnimationPack(pack)
-    if not pack then return end
-    LastEquippedPack = pack
+	if not pack then return end
+	LastEquippedPack = pack
 
-    local character = LocalPlayer.Character
-    if not character then return end
-    
-    local animateScript = character:FindFirstChild("Animate")
-    local humanoid = character:FindFirstChildOfClass("Humanoid")
-    if not animateScript or not humanoid then return end
+	local character = LocalPlayer.Character
+	if not character then return end
 
-    for _, track in ipairs(humanoid:GetPlayingAnimationTracks()) do
-        pcall(function() track:Stop(0) end)
-    end
+	local animateScript = character:FindFirstChild("Animate")
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	if not animateScript or not humanoid then return end
 
-    animateScript.Disabled = true
+	for _, track in ipairs(humanoid:GetPlayingAnimationTracks()) do
+		pcall(function() track:Stop(0) end)
+	end
+	animateScript.Disabled = true
 
-    local items = pack.bundledItems
-    local mapping = {
-        ["idle"]  = {id = items["Idle"],  prop = "IdleAnimation"},
-        ["walk"]  = {id = items["Walk"],  prop = "WalkAnimation"},
-        ["run"]   = {id = items["Run"],   prop = "RunAnimation"},
-        ["jump"]  = {id = items["Jump"],  prop = "JumpAnimation"},
-        ["fall"]  = {id = items["Fall"],  prop = "FallAnimation"},
-        ["climb"] = {id = items["Climb"], prop = "ClimbAnimation"},
-        ["swim"]  = {id = items["Swim"],  prop = "SwimAnimation"}
-    }
+	local items = pack.bundledItems or {}
+	local mapping = {
+		idle  = { id = items["Idle"],  prop = "IdleAnimation" },
+		walk  = { id = items["Walk"],  prop = "WalkAnimation" },
+		run   = { id = items["Run"],   prop = "RunAnimation" },
+		jump  = { id = items["Jump"],  prop = "JumpAnimation" },
+		fall  = { id = items["Fall"],  prop = "FallAnimation" },
+		climb = { id = items["Climb"], prop = "ClimbAnimation" },
+		swim  = { id = items["Swim"],  prop = "SwimAnimation" },
+	}
 
-    for folderName, info in pairs(mapping) do
-        if info.id then
-            local folder = animateScript:FindFirstChild(folderName)
-            if folder then
-                for _, child in ipairs(folder:GetChildren()) do
-                    if child:IsA("Animation") then child:Destroy() end
-                end
+	for folderName, info in pairs(mapping) do
+		if info.id then
+			local folder = animateScript:FindFirstChild(folderName)
+			if folder then
+				for _, child in ipairs(folder:GetChildren()) do
+					if child:IsA("Animation") then child:Destroy() end
+				end
+				local tracks = extractValidAnimationTracks(info.id, info.prop)
+				for _, t in ipairs(tracks) do t.Parent = folder end
+			end
+		end
+	end
 
-                local validTracks = extractValidAnimationTracks(info.id, info.prop)
-                for _, track in ipairs(validTracks) do
-                    track.Parent = folder
-                end
-            end
-        end
-    end
-
-    task.wait(0.05)
-    animateScript.Disabled = false
+	task.defer(function() animateScript.Disabled = false end)
 end
 
---------------------------------------------------
--- SISTEMA AUTO-EQUIPAR ANIMAÇÃO AO RENASCER
---------------------------------------------------
-
-LocalPlayer.CharacterAdded:Connect(function(newCharacter)
-	local animateScript = newCharacter:WaitForChild("Animate", 10)
-	local humanoid = newCharacter:WaitForChild("Humanoid", 10)
-	
+LocalPlayer.CharacterAdded:Connect(function(newChar)
+	local animateScript = newChar:WaitForChild("Animate", 10)
+	local humanoid = newChar:WaitForChild("Humanoid", 10)
 	if animateScript and humanoid and LastEquippedPack then
 		task.wait(0.5)
 		ApplyAnimationPack(LastEquippedPack)
 	end
 end)
 
---------------------------------------------------
+-- ============================================================
 -- PARAR EMOTE AO ANDAR
---------------------------------------------------
-
-local RunService = game:GetService("RunService")
-
-RunService.Heartbeat:Connect(function()
-
-	if MovimentoAtivo then
-		return
-	end
-
-	if not CurrentTrack then
-		return
-	end
+-- ============================================================
+local acc = 0
+RunService.Heartbeat:Connect(function(dt)
+	if MovimentoAtivo or not CurrentTrack then return end
+	acc += dt
+	if acc < 0.1 then return end
+	acc = 0
 
 	local Character = LocalPlayer.Character
-	if not Character then
-		return
-	end
-
+	if not Character then return end
 	local Humanoid = Character:FindFirstChildOfClass("Humanoid")
-	if not Humanoid then
-		return
-	end
+	if not Humanoid then return end
 
 	local Moving = Humanoid.MoveDirection.Magnitude > 0.1
-
 	local State = Humanoid:GetState()
-
-	local Jumping =
-		State == Enum.HumanoidStateType.Jumping
-		or State == Enum.HumanoidStateType.Freefall
-
-	if Moving or Jumping then
-
-		CurrentTrack:Stop()
-
+	if Moving or State == Enum.HumanoidStateType.Jumping
+		or State == Enum.HumanoidStateType.Freefall then
+		pcall(function() CurrentTrack:Stop() end)
 		CurrentTrack = nil
-
 	end
-
 end)
 
---------------------------------------------------
--- SISTEMA DE SALVAMENTO DE FAVORITOS
---------------------------------------------------
+-- ============================================================
+-- CARDS
+-- ============================================================
+local function makeEmoteCard(asset)
+	local assetIdStr = tostring(asset.id)
+	if LoadedEmotes[assetIdStr] then return end
+	LoadedEmotes[assetIdStr] = true
 
-local Favorites = {} 
-local AnimFavorites = {}
-local LoadedEmotes = {}
-local LoadedAnims = {}
+	local Emote = Instance.new("ImageButton")
+	Emote.Name = assetIdStr
+	Emote.Size = UDim2.fromOffset(84, 84)
+	Emote.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+	Emote.BackgroundTransparency = .5
+	Emote.Image = ""
+	Emote:SetAttribute("EmoteName", asset.name)
+	Emote:SetAttribute("ItemMode", "Emotes")
+	Emote.Visible = (currentMode == "Emotes")
+	Instance.new("UICorner", Emote)
 
-local HttpService = game:GetService("HttpService")
-local FAVORITES_FILE = "EmoteFavorites.json"
-local ANIM_FAVORITES_FILE = "AnimPacksFavorites.json"
+	local Star = Instance.new("TextButton")
+	Star.Parent = Emote
+	Star.Size = UDim2.new(0, 22, 0, 22)
+	Star.Position = UDim2.new(1, -24, 0, 2)
+	Star.BackgroundTransparency = 1
+	Star.Text = Favorites[assetIdStr] and "★" or "☆"
+	Star.TextScaled = true
+	Star.TextColor3 = Color3.fromRGB(255, 220, 0)
+	Star.ZIndex = 3
 
-if writefile and not isfile(FAVORITES_FILE) then writefile(FAVORITES_FILE, "{}") end
-if readfile and isfile(FAVORITES_FILE) then
-	local success, data = pcall(function() return HttpService:JSONDecode(readfile(FAVORITES_FILE)) end)
-	if success and type(data) == "table" then Favorites = data end
-end
-
-if writefile and not isfile(ANIM_FAVORITES_FILE) then writefile(ANIM_FAVORITES_FILE, "{}") end
-if readfile and isfile(ANIM_FAVORITES_FILE) then
-	local success, data = pcall(function() return HttpService:JSONDecode(readfile(ANIM_FAVORITES_FILE)) end)
-	if success and type(data) == "table" then AnimFavorites = data end
-end
-
-local function SaveFavorites(mode)
-	if writefile then
-		if mode == "Emotes" then
-			writefile(FAVORITES_FILE, HttpService:JSONEncode(Favorites))
+	Star.MouseButton1Click:Connect(function()
+		if Favorites[assetIdStr] then
+			Favorites[assetIdStr] = nil; Star.Text = "☆"
 		else
-			writefile(ANIM_FAVORITES_FILE, HttpService:JSONEncode(AnimFavorites))
+			Favorites[assetIdStr] = asset.name; Star.Text = "★"
 		end
-	end
-end
+		SaveFavorites("Emotes")
+		task.defer(ReorderItems)
+	end)
 
-local function RefreshLayout()
-	Frame.CanvasSize = UDim2.new(0,0,0,Grid.AbsoluteContentSize.Y + 10)
-end
+	Emote.MouseEnter:Connect(function()
+		if currentMode == "Emotes" then EmoteName.Text = asset.name end
+	end)
 
---------------------------------------------------
--- REORGANIZAÇÃO EM TEMPO REAL (ORDEM DOS BOTÕES)
---------------------------------------------------
+	Emote.MouseButton1Click:Connect(function()
+		if currentMode == "Emotes" then
+			EmoteName.Text = asset.name
 
-local currentMode = "Emotes"
+			-- Fecha imediatamente (sem esperar animação)
+			SetGuiAberta(false)
 
-local function ReorderItems()
-	local FavOrder = 0
-	local NormalOrder = 10000
-
-	for _, obj in ipairs(Frame:GetChildren()) do
-		if obj:IsA("ImageButton") then
-			local itemMode = obj:GetAttribute("ItemMode")
-			if itemMode == currentMode then
-				local isFav = (currentMode == "Emotes" and Favorites[obj.Name]) or (currentMode == "Animations" and AnimFavorites[obj.Name])
-				if isFav then
-					FavOrder += 1
-					obj.LayoutOrder = FavOrder
-				else
-					NormalOrder += 1
-					obj.LayoutOrder = NormalOrder
-				end
-			end
+			-- Toca em background
+			task.spawn(function()
+				PlayEmote(tonumber(assetIdStr))
+			end)
 		end
-	end
+	end)
+
+	Emote.Parent = Frame
+
+	queueLazy(Emote, function()
+		Emote.Image = "rbxthumb://type=Asset&id=" .. assetIdStr .. "&w=150&h=150"
+	end)
 end
 
---------------------------------------------------
--- MUDANÇA DE VISIBILIDADE POR MODO (ULTRA OTIMIZADO)
---------------------------------------------------
+local function makeAnimCard(pack)
+	local packIdStr = tostring(pack.id)
+	if LoadedAnims[packIdStr] then return end
+	LoadedAnims[packIdStr] = true
 
+	local Card = Instance.new("ImageButton")
+	Card.Name = packIdStr
+	Card.Size = UDim2.fromOffset(84, 84)
+	Card.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+	Card.BackgroundTransparency = .5
+	Card.Image = ""
+	Card:SetAttribute("EmoteName", pack.name)
+	Card:SetAttribute("ItemMode", "Animations")
+	Card.Visible = (currentMode == "Animations")
+	Instance.new("UICorner", Card)
+
+	local Star = Instance.new("TextButton")
+	Star.Parent = Card
+	Star.Size = UDim2.new(0, 22, 0, 22)
+	Star.Position = UDim2.new(1, -24, 0, 2)
+	Star.BackgroundTransparency = 1
+	Star.Text = AnimFavorites[packIdStr] and "★" or "☆"
+	Star.TextScaled = true
+	Star.TextColor3 = Color3.fromRGB(255, 220, 0)
+	Star.ZIndex = 3
+
+	Star.MouseButton1Click:Connect(function()
+		if AnimFavorites[packIdStr] then
+			AnimFavorites[packIdStr] = nil; Star.Text = "☆"
+		else
+			AnimFavorites[packIdStr] = pack.name; Star.Text = "★"
+		end
+		SaveFavorites("Animations")
+		task.defer(ReorderItems)
+	end)
+
+	Card.MouseEnter:Connect(function()
+		if currentMode == "Animations" then EmoteName.Text = pack.name end
+	end)
+
+	Card.MouseButton1Click:Connect(function()
+		if currentMode == "Animations" then
+			EmoteName.Text = pack.name
+
+			-- Fecha imediatamente (sem esperar animação)
+			SetGuiAberta(false)
+
+			-- Aplica em background
+			task.spawn(function()
+				ApplyAnimationPack(pack)
+			end)
+		end
+	end)
+
+	Card.Parent = Frame
+
+	queueLazy(Card, function()
+		Card.Image = "rbxthumb://type=BundleThumbnail&id=" .. packIdStr .. "&w=150&h=150"
+	end)
+end
+
+-- ============================================================
+-- INSTANT INJECT
+-- ============================================================
+local function injectInstant(items, factory)
+	for i = 1, #items do
+		pcall(factory, items[i])
+	end
+	ReorderItems()
+	RefreshLayout()
+end
+
+-- ============================================================
+-- MODO
+-- ============================================================
 local function SwitchMode(mode)
 	currentMode = mode
-	SearchBar.Text = ""
-	
 	for _, obj in ipairs(Frame:GetChildren()) do
 		if obj:IsA("ImageButton") then
-			local itemMode = obj:GetAttribute("ItemMode")
-			
-			if itemMode == mode then
-				obj.Visible = true
-			else
-				obj.Visible = false
-			end
+			obj.Visible = (obj:GetAttribute("ItemMode") == mode)
 		end
 	end
-	
 	ReorderItems()
+	updateVisible()
 	RefreshLayout()
 end
 
@@ -495,277 +651,175 @@ ModeToggle.MouseButton1Click:Connect(function()
 	end
 end)
 
---------------------------------------------------
--- CRIAÇÃO DOS BOTÕES DE EMOTE (OTIMIZADO)
---------------------------------------------------
+-- ============================================================
+-- PESQUISA EM LOTES
+-- ============================================================
+local MAX_RESULTS = 120
+local searchQueued = false
+local searchToken = 0
 
-local function CreateEmote(asset)
-	local assetIdStr = tostring(asset.id)
-	if LoadedEmotes[assetIdStr] then return end
-	LoadedEmotes[assetIdStr] = true
+local function loadChunks(items, factory, chunkSize, onStep)
+	chunkSize = chunkSize or 15
+	local i = 1
+	local total = #items
+	local myToken = searchToken
 
-	local Emote = Instance.new("ImageButton")
-	Emote.Parent = Frame
-	Emote.Size = UDim2.fromOffset(90,90)
-	Emote.BackgroundColor3 = Color3.fromRGB(0,0,0)
-	Emote.BackgroundTransparency = .5
-	Emote.Name = assetIdStr
-
-	Emote:SetAttribute("EmoteName", asset.name)
-	Emote:SetAttribute("ItemMode", "Emotes")
-	Emote.Visible = (currentMode == "Emotes")
-
-	Emote.Image = "rbxthumb://type=Asset&id=" .. assetIdStr .. "&w=150&h=150"
-	Instance.new("UICorner", Emote)
-	
-	local Star = Instance.new("TextButton")
-	Star.Parent = Emote
-	Star.Size = UDim2.new(0,22,0,22)
-	Star.Position = UDim2.new(1,-24,0,2)
-	Star.BackgroundTransparency = 1
-	Star.Text = Favorites[assetIdStr] and "★" or "☆"
-	Star.TextScaled = true
-	Star.TextColor3 = Color3.fromRGB(255,220,0)
-
-	Star.MouseButton1Click:Connect(function()
-		if Favorites[assetIdStr] then
-			Favorites[assetIdStr] = nil
-			Star.Text = "☆"
-		else
-			Favorites[assetIdStr] = asset.name
-			Star.Text = "★"
+	local function step()
+		if myToken ~= searchToken then return end
+		local limit = math.min(i + chunkSize - 1, total)
+		for j = i, limit do
+			pcall(factory, items[j])
 		end
-		SaveFavorites("Emotes")
-		ReorderItems()
-	end)
-
-	Emote.MouseEnter:Connect(function()
-		if currentMode == "Emotes" then EmoteName.Text = asset.name end
-	end)
-
-	Emote.MouseButton1Click:Connect(function()
-		if currentMode == "Emotes" then
-			EmoteName.Text = asset.name
-			PlayEmote(tonumber(assetIdStr))
+		i = limit + 1
+		RefreshLayout()
+		if onStep then onStep() end
+		if i <= total then
+			task.wait()
+			step()
 		end
-	end)
+	end
+	task.spawn(step)
 end
 
---------------------------------------------------
--- CRIAÇÃO DOS BOTÕES DE PACK DE ANIMAÇÃO (OTIMIZADO)
---------------------------------------------------
+local function doSearch()
+	searchToken += 1
+	local myToken = searchToken
+	local texto = string.lower(SearchBar.Text)
 
-local function CreateAnimationCard(pack)
-	local packIdStr = tostring(pack.id)
-	if LoadedAnims[packIdStr] then return end
-	LoadedAnims[packIdStr] = true
-
-	local Card = Instance.new("ImageButton")
-	Card.Parent = Frame
-	Card.Size = UDim2.fromOffset(90,90)
-	Card.BackgroundColor3 = Color3.fromRGB(0,0,0)
-	Card.BackgroundTransparency = .5
-	Card.Name = packIdStr
-
-	Card:SetAttribute("EmoteName", pack.name)
-	Card:SetAttribute("ItemMode", "Animations")
-	Card.Visible = (currentMode == "Animations")
-
-	Card.Image = "rbxthumb://type=BundleThumbnail&id=" .. packIdStr .. "&w=150&h=150"
-	Instance.new("UICorner", Card)
-
-	local Star = Instance.new("TextButton")
-	Star.Parent = Card
-	Star.Size = UDim2.new(0,22,0,22)
-	Star.Position = UDim2.new(1,-24,0,2)
-	Star.BackgroundTransparency = 1
-	Star.Text = AnimFavorites[packIdStr] and "★" or "☆"
-	Star.TextScaled = true
-	Star.TextColor3 = Color3.fromRGB(255,220,0)
-
-	Star.MouseButton1Click:Connect(function()
-		if AnimFavorites[packIdStr] then
-			AnimFavorites[packIdStr] = nil
-			Star.Text = "☆"
-		else
-			AnimFavorites[packIdStr] = pack.name
-			Star.Text = "★"
-		end
-		SaveFavorites("Animations")
-		ReorderItems()
-	end)
-
-	Card.MouseEnter:Connect(function()
-		if currentMode == "Animations" then EmoteName.Text = pack.name end
-	end)
-
-	Card.MouseButton1Click:Connect(function()
-		if currentMode == "Animations" then
-			EmoteName.Text = pack.name
-			ApplyAnimationPack(pack)
-		end
-	end)
-end
-
---------------------------------------------------
--- SISTEMA DE FILTRAGEM POR DIGITAÇÃO (PESQUISA COMPLETA)
---------------------------------------------------
-
--- Arrays para armazenar todos os dados do catálogo
-local AllEmotesData = {}
-local AllAnimsData = {}
-
-local function UpdateSearch()
-	local Texto = string.lower(SearchBar.Text)
-	
-	if Texto == "" then
-		-- Se pesquisa vazia, mostra apenas os itens já carregados
-		for _,obj in ipairs(Frame:GetChildren()) do
+	if texto == "" then
+		for _, obj in ipairs(Frame:GetChildren()) do
 			if obj:IsA("ImageButton") then
-				local itemMode = obj:GetAttribute("ItemMode")
-				if itemMode == currentMode then
-					obj.Visible = true
-				else
-					obj.Visible = false
-				end
+				obj.Visible = (obj:GetAttribute("ItemMode") == currentMode)
 			end
 		end
 		ReorderItems()
+		updateVisible()
 		RefreshLayout()
 		return
 	end
-	
-	-- Se há pesquisa, procura em TODA a lista
-	local dataToSearch = currentMode == "Emotes" and AllEmotesData or AllAnimsData
-	local isEmoteMode = currentMode == "Emotes"
-	
-	-- Esconde todos os botões primeiro
-	for _,obj in ipairs(Frame:GetChildren()) do
-		if obj:IsA("ImageButton") then
+
+	local dataToSearch = (currentMode == "Emotes") and AllEmotesData or AllAnimsData
+	local isEmote = (currentMode == "Emotes")
+
+	for _, obj in ipairs(Frame:GetChildren()) do
+		if obj:IsA("ImageButton") and obj:GetAttribute("ItemMode") == currentMode then
 			obj.Visible = false
 		end
 	end
-	
-	-- Procura e cria botões para itens que correspondem à pesquisa
-	local searchResults = {}
-	
+
+	local matches = {}
+	local count = 0
 	for _, item in ipairs(dataToSearch) do
 		local itemName = string.lower(item.name or "")
 		local itemId = tostring(item.id)
-		
-		if string.find(itemName, Texto, 1, true) or string.find(itemId, Texto, 1, true) then
-			table.insert(searchResults, item)
+		if string.find(itemName, texto, 1, true) or string.find(itemId, texto, 1, true) then
+			table.insert(matches, item)
+			count += 1
+			if count >= MAX_RESULTS then break end
 		end
 	end
-	
-	-- Cria botões para os resultados da pesquisa
-	for _, item in ipairs(searchResults) do
-		if isEmoteMode then
-			CreateEmote(item)
-		else
-			CreateAnimationCard(item)
+
+	local factory = isEmote and makeEmoteCard or makeAnimCard
+	local toCreate = {}
+	local idset = {}
+	for _, item in ipairs(matches) do
+		local idStr = tostring(item.id)
+		idset[idStr] = true
+		local loaded = isEmote and LoadedEmotes[idStr] or LoadedAnims[idStr]
+		if not loaded then table.insert(toCreate, item) end
+	end
+
+	for _, obj in ipairs(Frame:GetChildren()) do
+		if obj:IsA("ImageButton") and obj:GetAttribute("ItemMode") == currentMode then
+			if idset[obj.Name] then obj.Visible = true end
 		end
 	end
-	
-	-- Mostra apenas os resultados da pesquisa
-	local searchIds = {}
-	for _, item in ipairs(searchResults) do
-		searchIds[tostring(item.id)] = true
-	end
-	
-	for _,obj in ipairs(Frame:GetChildren()) do
-		if obj:IsA("ImageButton") then
-			local itemMode = obj:GetAttribute("ItemMode")
-			if itemMode == currentMode and searchIds[obj.Name] then
-				obj.Visible = true
-			end
-		end
-	end
-	
 	ReorderItems()
-	RefreshLayout()
+	updateVisible()
+
+	if #toCreate > 0 then
+		loadChunks(toCreate, factory, 15, function()
+			if myToken ~= searchToken then return end
+			for _, obj in ipairs(Frame:GetChildren()) do
+				if obj:IsA("ImageButton") and obj:GetAttribute("ItemMode") == currentMode then
+					if idset[obj.Name] then obj.Visible = true end
+				end
+			end
+			ReorderItems()
+			updateVisible()
+		end)
+	end
 end
 
-SearchBar:GetPropertyChangedSignal("Text"):Connect(UpdateSearch)
-
---------------------------------------------------
--- CARREGAMENTO ASSÍNCRONO OTIMIZADO
---------------------------------------------------
-
--- 1. Carrega Emotes (500 últimos)
-task.spawn(function()
-	local url = "https://raw.githubusercontent.com/psychoSAGAZ/Anima-es-e-emotes/refs/heads/main/EmoteSniper.json"
-	local success, response = pcall(function() return game:HttpGet(url) end)
-
-	if success and response then
-		local parsed = HttpService:JSONDecode(response)
-		if parsed and parsed.data then
-			-- Salva TODOS os dados para pesquisa
-			AllEmotesData = parsed.data
-			
-			local CatalogLookup = {}
-			for _, asset in ipairs(parsed.data) do CatalogLookup[tostring(asset.id)] = asset.name end
-
-			-- Instancia os favoritos salvos locais primeiro
-			for favId, favValue in pairs(Favorites) do
-				local name = type(favValue) == "string" and favValue or CatalogLookup[tostring(favId)] or "Emote Desconhecido"
-				CreateEmote({id = favId, name = name})
-			end
-			
-			-- Carrega apenas os últimos 500 emotes
-			local totalEmotes = #parsed.data
-			local startIndex = math.max(1, totalEmotes - 499)
-			
-			for i = startIndex, totalEmotes do
-				local asset = parsed.data[i]
-				if asset and not Favorites[tostring(asset.id)] then
-					CreateEmote(asset)
-				end
-			end
-			
-			ReorderItems()
-			RefreshLayout()
-		end
-	end
+SearchBar:GetPropertyChangedSignal("Text"):Connect(function()
+	if searchQueued then return end
+	searchQueued = true
+	task.delay(0.3, function()
+		searchQueued = false
+		local ok, err = pcall(doSearch)
+		if not ok then warn("[EmotesGUI] search:", err) end
+	end)
 end)
 
--- 2. Carrega Packs de Animação
+-- ============================================================
+-- CARREGAR CATÁLOGOS
+-- ============================================================
+local CATALOG_EMOTES = "https://raw.githubusercontent.com/psychoSAGAZ/Anima-es-e-emotes/refs/heads/main/EmoteSniper.json"
+local CATALOG_ANIMS  = "https://raw.githubusercontent.com/psychoSAGAZ/Anima-es-e-emotes/refs/heads/main/AnimationSniper.json"
+
+local function fetchJSON(url)
+	local ok, response = pcall(game.HttpGet, game, url)
+	if not ok or not response then return nil end
+	local ok2, parsed = pcall(function() return HttpService:JSONDecode(response) end)
+	if not ok2 then return nil end
+	return parsed
+end
+
+-- ── EMOTES: últimos 300 ──
 task.spawn(function()
-	local url = "https://raw.githubusercontent.com/psychoSAGAZ/Anima-es-e-emotes/refs/heads/main/AnimationSniper.json"
-	local success, response = pcall(function() return game:HttpGet(url) end)
+	local parsed = fetchJSON(CATALOG_EMOTES)
+	if not parsed or not parsed.data then return end
+	AllEmotesData = parsed.data
 
-	if success and response then
-		local parsed = HttpService:JSONDecode(response)
-		if parsed and parsed.data then
-			-- Salva TODOS os dados para pesquisa
-			AllAnimsData = parsed.data
-			
-			local CatalogLookup = {}
-			for _, pack in ipairs(parsed.data) do CatalogLookup[tostring(pack.id)] = pack.name end
+	local total = #parsed.data
+	local startIdx = math.max(1, total - 299)
 
-			-- Instancia os favoritos primeiro
-			for favId, favValue in pairs(AnimFavorites) do
-				local name = type(favValue) == "string" and favValue or CatalogLookup[tostring(favId)] or "Pack Desconhecido"
-				local matchedPack = nil
-				for _, p in ipairs(parsed.data) do
-					if tostring(p.id) == tostring(favId) then matchedPack = p break end
-				end
-				CreateAnimationCard(matchedPack or {id = favId, name = name, bundledItems = {}})
-			end
-			
-			-- Carrega todos os packs
-			for _, pack in ipairs(parsed.data) do
-				if not AnimFavorites[tostring(pack.id)] then
-					CreateAnimationCard(pack)
-				end
-			end
-			
-			ReorderItems()
-			RefreshLayout()
+	local ordered = {}
+	for favId, name in pairs(Favorites) do
+		table.insert(ordered, { id = favId, name = type(name) == "string" and name or ("Emote " .. favId) })
+	end
+	for i = startIdx, total do
+		local a = parsed.data[i]
+		if a and not Favorites[tostring(a.id)] then
+			table.insert(ordered, a)
 		end
 	end
+
+	injectInstant(ordered, makeEmoteCard)
 end)
 
-task.wait(0.5)
-Frame.CanvasPosition = Vector2.new(0,1)
-Frame.CanvasPosition = Vector2.new(0,0)
+-- ── ANIMAÇÕES: últimos 300 ──
+task.spawn(function()
+	local parsed = fetchJSON(CATALOG_ANIMS)
+	if not parsed or not parsed.data then return end
+	AllAnimsData = parsed.data
+
+	local lookup = {}
+	for _, p in ipairs(parsed.data) do lookup[tostring(p.id)] = p end
+
+	local ordered = {}
+	for favId, name in pairs(AnimFavorites) do
+		local pack = lookup[tostring(favId)]
+		table.insert(ordered, pack or { id = favId, name = tostring(name), bundledItems = {} })
+	end
+	local total = #parsed.data
+	local startIdx = math.max(1, total - 299)
+	for i = startIdx, total do
+		local p = parsed.data[i]
+		if p and not AnimFavorites[tostring(p.id)] then
+			table.insert(ordered, p)
+		end
+	end
+
+	injectInstant(ordered, makeAnimCard)
+end)
