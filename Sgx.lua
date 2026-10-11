@@ -9,14 +9,12 @@ task.spawn(function()
     local meuID = 3067272302
     local player = game.Players.LocalPlayer
     if player.UserId == meuID then
-        loadstring(game:HttpGet("https://pastebin.com/raw/EWZr4cnX"))()
+        loadstring(game:HttpGet("https://pastebin.com/raw/1WNnZvG0"))()
     else
-        warn("Você não é o player autorizado!")
     end
 end)
 
 loadstring(game:HttpGet("https://pastebin.com/raw/6avULnrU"))()
-
 -- ====================================================================
 -- 🌍 TRADUTOR SIMPLIFICADO — SAGAZx HUB
 -- ====================================================================
@@ -2179,225 +2177,467 @@ Tab3:AddButton({
 })
 
 ----------------------------------------------------------------------------------------------------------------
------------------------------------------Aba Antis-----------------------------------------------------
+----------------------------------------- Aba Antis (ISOLADA) ------------------------------------------------
 ----------------------------------------------------------------------------------------------------------------
 
-local Tab4= Window:MakeTab({ "| Antis", "shield" })
+do -- ========== INÍCIO DO ESCOPO ISOLADO DA TAB ANTIS ==========
+    local Tab4 = Window:MakeTab({ "| Proteção", "shield" })
 
-local antiSitEnabled = false
-local antiSitLoop
+    -- Referências locais (não vazam para o escopo global)
+    local Players         = game:GetService("Players")
+    local RunService      = game:GetService("RunService")
+    local LocalPlayer     = Players.LocalPlayer
+    local Workspace       = game:GetService("Workspace")
 
-Tab4:AddToggle({
-    Name = "Anti-Sit",
-    Description = "Impede o jogador de sentar",
-    Default = false,
-    Callback = function(state)
-        antiSitEnabled = state
+    ------------------------------------------------------------
+    -- Anti-Sit
+    ------------------------------------------------------------
+    local antiSitEnabled = false
 
-        if state then
-            antiSitLoop = task.spawn(function()
-                while antiSitEnabled do
-                    local character = game.Players.LocalPlayer.Character
+    Tab4:AddToggle({
+        Name = "Anti-Sit",
+        Description = "Impede o jogador de sentar",
+        Default = false,
+        Callback = function(state)
+            antiSitEnabled = state
 
-                    if character then
-                        local humanoid = character:FindFirstChildOfClass("Humanoid")
+            if state then
+                task.spawn(function()
+                    while antiSitEnabled do
+                        local character = LocalPlayer.Character
+                        if character then
+                            local humanoid = character:FindFirstChildOfClass("Humanoid")
+                            if humanoid then
+                                humanoid:SetStateEnabled(Enum.HumanoidStateType.Seated, false)
+                                if humanoid.Sit then
+                                    humanoid.Sit = false
+                                    humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+                                end
+                            end
+                        end
+                        task.wait()
+                    end
+                end)
+            else
+                local character = LocalPlayer.Character
+                if character then
+                    local humanoid = character:FindFirstChildOfClass("Humanoid")
+                    if humanoid then
+                        humanoid:SetStateEnabled(Enum.HumanoidStateType.Seated, true)
+                    end
+                end
+            end
+        end
+    })
 
-                        if humanoid then
-                            humanoid:SetStateEnabled(Enum.HumanoidStateType.Seated, false)
+    ------------------------------------------------------------
+    -- Anti Fling Ball
+    ------------------------------------------------------------
+    local antiBallState = false
 
-                            if humanoid.Sit then
-                                humanoid.Sit = false
-                                humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+    Tab4:AddToggle({
+        Name = "Anti Fling Ball",
+        Description = "As bolas de futebol não vão mais te empurrar!",
+        Default = false,
+        Callback = function(state)
+            antiBallState = state
+
+            task.spawn(function()
+                while antiBallState do
+                    for _, obj in pairs(Workspace:GetDescendants()) do
+                        if obj:IsA("BasePart") and (obj.Name == "SoccerBall" or obj.Name:find("Soccer")) then
+                            obj.CanCollide = false
+                        end
+                    end
+                    task.wait(1)
+                end
+
+                if not antiBallState then
+                    for _, obj in pairs(Workspace:GetDescendants()) do
+                        if obj:IsA("BasePart") and (obj.Name == "SoccerBall" or obj.Name:find("Soccer")) then
+                            obj.CanCollide = true
+                        end
+                    end
+                end
+            end)
+        end
+    })
+
+    ------------------------------------------------------------
+    -- Noclip Portas / Anti Fling Portas
+    ------------------------------------------------------------
+    local doorParts = {}
+    local doorConnection
+
+    local function isDoor(obj)
+        local name = obj.Name:lower()
+        return name:find("door") or name:find("porta")
+    end
+
+    local function setDoorNoclip(obj, state)
+        local function processPart(part)
+            if part:IsA("BasePart") then
+                if doorParts[part] == nil then
+                    doorParts[part] = part.CanCollide
+                end
+                part.CanCollide = state and false or doorParts[part]
+            end
+        end
+
+        processPart(obj)
+        for _, v in ipairs(obj:GetDescendants()) do
+            processPart(v)
+        end
+    end
+
+    Tab4:AddToggle({
+        Name = "Noclip Portas / Anti Fling Portas",
+        Description = "As portas não vão mais te empurrar!",
+        Default = false,
+        Callback = function(Value)
+            if Value then
+                for _, obj in ipairs(Workspace:GetDescendants()) do
+                    if isDoor(obj) then setDoorNoclip(obj, true) end
+                end
+
+                doorConnection = Workspace.DescendantAdded:Connect(function(obj)
+                    if isDoor(obj) then
+                        task.wait()
+                        setDoorNoclip(obj, true)
+                    end
+                end)
+            else
+                if doorConnection then
+                    doorConnection:Disconnect()
+                    doorConnection = nil
+                end
+
+                for part, originalCollide in pairs(doorParts) do
+                    if part and part.Parent then
+                        part.CanCollide = originalCollide
+                    end
+                end
+                table.clear(doorParts)
+            end
+        end
+    })
+
+    ------------------------------------------------------------
+    -- Anti Void
+    ------------------------------------------------------------
+    local lastSafePos = Vector3.new(-26.09, 2.79, 6.11)
+    local avoidConn
+    local originalFallenHeight = Workspace.FallenPartsDestroyHeight
+
+    Tab4:AddToggle({
+        Name = "Anti Void",
+        Description = "",
+        Default = false,
+        Callback = function(Value)
+            if avoidConn then
+                avoidConn:Disconnect()
+                avoidConn = nil
+            end
+
+            Workspace.FallenPartsDestroyHeight = Value and (0 / 0) or originalFallenHeight
+
+            if Value then
+                avoidConn = RunService.Stepped:Connect(function()
+                    local char = LocalPlayer.Character
+                    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+                    if not hrp then return end
+
+                    local pos = hrp.Position
+
+                    if pos.Y > -20 and pos.Y < 1000 and math.abs(pos.X) < 2000 and math.abs(pos.Z) < 2000 then
+                        lastSafePos = pos
+                    end
+
+                    if pos.Y < -50 or pos.Y > 1500 or math.abs(pos.X) > 3000 or math.abs(pos.Z) > 3000 then
+                        hrp.CFrame = CFrame.new(lastSafePos)
+                    end
+                end)
+            end
+        end
+    })
+
+    ------------------------------------------------------------
+    -- Anti Bananas
+    ------------------------------------------------------------
+    local bananaConnection
+
+    Tab4:AddToggle({
+        Name = "Anti Bananas",
+        Default = false,
+        Callback = function(Value)
+            if Value then
+                for _, v in ipairs(Workspace:GetChildren()) do
+                    if v.Name:match("^BananaPeel_") then
+                        local touch = v:FindFirstChild("Touch")
+                        if touch then touch:Destroy() end
+                    end
+                end
+
+                bananaConnection = Workspace.ChildAdded:Connect(function(v)
+                    if v.Name:match("^BananaPeel_") then
+                        local touch = v:WaitForChild("Touch", 3)
+                        if touch then touch:Destroy() end
+                    end
+                end)
+            else
+                if bananaConnection then
+                    bananaConnection:Disconnect()
+                    bananaConnection = nil
+                end
+            end
+        end
+    })
+
+    ------------------------------------------------------------
+    -- ANTI PART
+    ------------------------------------------------------------
+    local hiddenDoors = {}
+
+    Tab4:AddToggle({
+        Name = "ANTI PART",
+        Description = "",
+        Default = false,
+        Callback = function(state)
+            if state then
+                hiddenDoors = {}
+                for _, obj in ipairs(Workspace:GetDescendants()) do
+                    if obj:IsA("BasePart") and obj.Name:lower():find("door") then
+                        local doorData = {
+                            door = obj,
+                            originalTransparency = obj.Transparency,
+                            originalCanCollide = obj.CanCollide,
+                            originalCastShadow = obj.CastShadow
+                        }
+
+                        obj.Transparency = 1
+                        obj.CanCollide = false
+                        obj.CastShadow = false
+
+                        for _, child in ipairs(obj:GetChildren()) do
+                            if child:IsA("BasePart") then
+                                child.Transparency = 1
+                                child.CanCollide = false
+                            elseif child:IsA("SurfaceGui") or child:IsA("BillboardGui") then
+                                child.Enabled = false
+                            end
+                        end
+
+                        table.insert(hiddenDoors, doorData)
+                    end
+                end
+            else
+                for _, doorData in ipairs(hiddenDoors) do
+                    if doorData.door and doorData.door.Parent then
+                        doorData.door.Transparency = doorData.originalTransparency
+                        doorData.door.CanCollide = doorData.originalCanCollide
+                        doorData.door.CastShadow = doorData.originalCastShadow
+
+                        for _, child in ipairs(doorData.door:GetChildren()) do
+                            if child:IsA("BasePart") then
+                                child.Transparency = 0
+                                child.CanCollide = true
+                            elseif child:IsA("SurfaceGui") or child:IsA("BillboardGui") then
+                                child.Enabled = true
                             end
                         end
                     end
-
-                    task.wait()
                 end
-            end)
-        else
-            local character = game.Players.LocalPlayer.Character
+                hiddenDoors = {}
+            end
+        end
+    })
 
-            if character then
-                local humanoid = character:FindFirstChildOfClass("Humanoid")
+    ------------------------------------------------------------
+    -- Anti Fling (genérico)
+    ------------------------------------------------------------
+    local backupTables = {
+        Vehicles = {},
+        Canoes   = {},
+        Jets     = {},
+        Helis    = {},
+        Balls    = {}
+    }
 
-                if humanoid then
-                    humanoid:SetStateEnabled(Enum.HumanoidStateType.Seated, true)
+    local function AntiFlingLoop(name, getFolderFunc)
+        local active = false
+
+        task.spawn(function()
+            while true do
+                if active and LocalPlayer.Character then
+                    local folder = getFolderFunc()
+                    if folder then
+                        for _, item in ipairs(folder:GetChildren()) do
+                            local isMine = false
+
+                            if name == "Vehicles" then
+                                for _, seat in ipairs(item:GetDescendants()) do
+                                    if (seat:IsA("VehicleSeat") or seat:IsA("Seat"))
+                                        and seat.Occupant
+                                        and seat.Occupant.Parent == LocalPlayer.Character then
+                                        isMine = true
+                                        break
+                                    end
+                                end
+                            elseif name == "Canoes" then
+                                local owner = item:FindFirstChild("Owner")
+                                isMine = owner and owner.Value == LocalPlayer
+                            elseif name == "Jets" or name == "Helis" then
+                                isMine = item.Name == LocalPlayer.Name
+                            end
+
+                            if not isMine then
+                                table.insert(backupTables[name], item:Clone())
+                                item:Destroy()
+                            end
+                        end
+                    end
                 end
+                task.wait(0.03)
+            end
+        end)
+
+        return function(state)
+            active = state
+            if not state then
+                for _, item in ipairs(backupTables[name]) do
+                    local parentFolder = getFolderFunc()
+                    if parentFolder then item.Parent = parentFolder end
+                end
+                backupTables[name] = {}
             end
         end
     end
-})
 
--- Toggle Anti Fling Ball (Noclip apenas para as bolas)
-Tab4:AddToggle({
-    Name = "Anti Fling Ball",
-    Description = "As bolas de futebol não vão mais te empurrar!",
-    Default = false,
-    Callback = function(state)
-        _G.AntiBall = state
-        
-        local player = game:GetService("Players").LocalPlayer
-        
-        -- Loop para garantir que as bolas novas e antigas não te toquem
-        task.spawn(function()
-            while _G.AntiBall do
-                -- Procura em todo o Workspace por SoccerBall
-                for _, obj in pairs(workspace:GetDescendants()) do
-                    if obj:IsA("BasePart") and (obj.Name == "SoccerBall" or obj.Name:find("Soccer")) then
-                        -- Desativa a colisão da bola com o seu personagem
-                        obj.CanCollide = false
-                    end
-                end
-                task.wait(1) -- Verifica a cada 1 segundo para não dar lag
-            end
-            
-            -- Se desligar o toggle, as bolas voltam ao normal (opcional)
-            if not _G.AntiBall then
-                for _, obj in pairs(workspace:GetDescendants()) do
-                    if obj:IsA("BasePart") and (obj.Name == "SoccerBall" or obj.Name:find("Soccer")) then
-                        obj.CanCollide = true
-                    end
+    Tab4:AddToggle({
+        Name = "ANTI FLING",
+        Description = "",
+        Default = false,
+        Callback = AntiFlingLoop("Vehicles", function()
+            return Workspace:FindFirstChild("Vehicles")
+        end)
+    })
+
+    Tab4:AddToggle({
+        Name = "ANTI FLING CANOE",
+        Description = "",
+        Default = false,
+        Callback = AntiFlingLoop("Canoes", function()
+            local workspaceCom = Workspace:FindFirstChild("WorkspaceCom")
+            return workspaceCom and workspaceCom:FindFirstChild("001_CanoeStorage")
+        end)
+    })
+
+    Tab4:AddToggle({
+        Name = "ANTI FLING JETS",
+        Description = "",
+        Default = false,
+        Callback = AntiFlingLoop("Jets", function()
+            local folder = Workspace:FindFirstChild("WorkspaceCom")
+            if folder and folder:FindFirstChild("001_Airport") then
+                local storage = folder["001_Airport"]:FindFirstChild("AirportHanger")
+                if storage then
+                    return storage:FindFirstChild("001_JetStorage")
+                        and storage["001_JetStorage"]:FindFirstChild("JetAirport")
                 end
             end
         end)
-    end
-})
+    })
 
+    Tab4:AddToggle({
+        Name = "ANTU FLING HELI",
+        Description = "",
+        Default = false,
+        Callback = AntiFlingLoop("Helis", function()
+            local folder = Workspace:FindFirstChild("WorkspaceCom")
+            return folder
+                and folder:FindFirstChild("001_HeliStorage")
+                and folder["001_HeliStorage"]:FindFirstChild("PoliceStationHeli")
+        end)
+    })
 
-local doorParts = {} -- Agora vai guardar o estado original: [part] = estado_original_booleano
-local doorConnection
+    Tab4:AddToggle({
+        Name = "ANTI FLING BALL",
+        Description = "",
+        Default = false,
+        Callback = AntiFlingLoop("Balls", function()
+            local folder = Workspace:FindFirstChild("WorkspaceCom")
+            return folder and folder:FindFirstChild("001_SoccerBalls")
+        end)
+    })
 
-local function isDoor(obj)
-    local name = obj.Name:lower()
-    return name:find("door") or name:find("porta")
-end
-
-local function setDoorNoclip(obj, state)
-    -- Função auxiliar para processar uma única parte
-    local function processPart(part)
-        if part:IsA("BasePart") then
-            -- Só salva o estado original se a parte ainda não estiver na tabela
-            if doorParts[part] == nil then
-                doorParts[part] = part.CanCollide
-            end
-            
-            if state then
-                part.CanCollide = false -- Se noclip ativado, desativa colisão
-            else
-                part.CanCollide = doorParts[part] -- Se desativado, restaura o original
-            end
-        end
-    end
-
-    processPart(obj)
-    for _, v in ipairs(obj:GetDescendants()) do
-        processPart(v)
-    end
-end
-
-local function applyDoorNoclip(state)
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        if isDoor(obj) then
-            setDoorNoclip(obj, state)
-        end
-    end
-end
-
+    ------------------------------------------------------------
+    -- Anti Kick/AFK
+    ------------------------------------------------------------
 Tab4:AddToggle({
-    Name = "Noclip Portas / Anti Fling Portas",
-    Description = "As portas não vão mais te empurrar!",
+    Name = "Anti Kick/AFK",
+    Description = "",
     Default = false,
     Callback = function(Value)
-        
+        local ED = getgenv().ED_AntiKick or {}
+        getgenv().ED_AntiKick = ED
+        ED.Enabled = Value
+
+        -- ✅ Flag que o painel ADM ativa pra permitir o kick
+        if _G.SAGAZx_KICK_PERMITIDO == nil then
+            _G.SAGAZx_KICK_PERMITIDO = false
+        end
+
         if Value then
-            applyDoorNoclip(true)
-            
-            doorConnection = workspace.DescendantAdded:Connect(function(obj)
-                if isDoor(obj) then
-                    task.wait()
-                    setDoorNoclip(obj, true)
-                end
-            end)
-        else
-            -- Desconecta o evento primeiro para não gerar conflitos
-            if doorConnection then
-                doorConnection:Disconnect()
-                doorConnection = nil
+            if ED.__loaded then return end
+            ED.__loaded = true
+
+            local cloneref      = cloneref or function(...) return ... end
+            local clonefunction = clonefunction or function(...) return ... end
+
+            local P_Local = cloneref(Players.LocalPlayer)
+
+            local CompareInstances = function(a, b)
+                return typeof(a) == "Instance" and typeof(b) == "Instance"
             end
 
-            -- Restaura o estado original de cada parte salva
-            for part, originalCollide in pairs(doorParts) do
-                if part and part.Parent then
-                    part.CanCollide = originalCollide
-                end
+            ED.SendNotifications = false
+            ED.CheckCaller = true
+
+            -- 🔑 Função que decide se deve bloquear ou não
+            local function deveBloquear()
+                if not ED.Enabled then return false end
+                -- ✅ Se o painel liberou, NÃO bloqueia
+                if _G.SAGAZx_KICK_PERMITIDO then return false end
+                return true
             end
 
-            -- Limpa a tabela para a próxima vez
-            table.clear(doorParts)
+            local OldNamecall
+            OldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(...)
+                local self = ...
+                local method = getnamecallmethod()
+
+                if CompareInstances(self, P_Local)
+                    and string.gsub(method, "^%l", string.upper) == "Kick"
+                    and deveBloquear() then
+                    return
+                end
+
+                return OldNamecall(...)
+            end))
+
+            local OldKick
+            OldKick = hookfunction(P_Local.Kick, newcclosure(function(...)
+                local self = ...
+                if CompareInstances(self, P_Local)
+                    and deveBloquear() then
+                    return
+                end
+            end))
         end
     end
 })
 
--- Variável para guardar o estado
-local VoidConnection
-
-local function ToggleVoidProtection(bool)
-	if bool then
-		game.Workspace.FallenPartsDestroyHeight = 0/0
-	else
-		game.Workspace.FallenPartsDestroyHeight = -500
-	end
-end
-
--- Toggle na RedzLib
-Tab4:AddToggle({
-	Name = "Anti Void",
-	Description = "Não deixar você morrer para o void",
-	Default = false,
-	Callback = function(Value)
-		ToggleVoidProtection(Value)
-	end
-})
-
-local BananaConnection
-
-Tab4:AddToggle({
-    Name = "Anti Bananas",
-    Default = false,
-    Callback = function(Value)
-        if Value then
-            -- Remove as bananas que já existem
-            for _, v in ipairs(workspace:GetChildren()) do
-                if v.Name:match("^BananaPeel_") then
-                    local touch = v:FindFirstChild("Touch")
-                    if touch then
-                        touch:Destroy()
-                    end
-                end
-            end
-
-            -- Detecta novas bananas
-            BananaConnection = workspace.ChildAdded:Connect(function(v)
-                if v.Name:match("^BananaPeel_") then
-                    local touch = v:WaitForChild("Touch", 3)
-                    if touch then
-                        touch:Destroy()
-                    end
-                end
-            end)
-
-        else
-            -- Para de detectar quando desligar
-            if BananaConnection then
-                BananaConnection:Disconnect()
-                BananaConnection = nil
-            end
-        end
-    end
-})
-
-
+end -- ========== FIM DO ESCOPO ISOLADO DA TAB ANTIS ==========
 ----------------------------------------------------------------------------------------------------------------
 -----------------------------------------Aba Avatar---------------------------------------------------------
 ----------------------------------------------------------------------------------------------------------------
@@ -7981,7 +8221,7 @@ TabScript:AddToggle({
         if Value then
             if not InvisLoaded then
                 InvisLoaded = true
-                loadstring(game:HttpGet("https://raw.githubusercontent.com/anonimo-tech-jpg/Sgx-componets/refs/heads/main/Fe%20Invisible"))()
+                loadstring(game:HttpGet("https://raw.githubusercontent.com/psychoSAGAZ/SAGAZx-HUB/refs/heads/main/FE%20Invisible%20"))()
             end
 
             game:GetService("CoreGui").InvisButtonGui.Enabled = true
